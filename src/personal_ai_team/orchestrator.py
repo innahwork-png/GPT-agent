@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
 from .agents import AGENTS
+from .models import AgentResult
+from .runtime import run_agent
 from .sdk_agents import SPECIALIZED_AGENTS
 
 
@@ -12,7 +14,7 @@ class Route:
 
 
 class Orchestrator:
-    """Route user tasks to the appropriate specialized agent."""
+    """Route tasks and execute specialized agents through the SDK."""
 
     def route(self, task: str) -> Route:
         text = task.lower()
@@ -31,6 +33,13 @@ class Orchestrator:
                     requires_multi_agent=self._looks_multi_agent(text),
                 )
         return Route(agent="orchestrator", reason="No specialized route matched; orchestration decision required.")
+
+    async def run_task(self, task: str) -> AgentResult:
+        """Route and execute a task. Unknown tasks fail explicitly."""
+        route = self.route(task)
+        if route.agent not in SPECIALIZED_AGENTS:
+            raise ValueError("No specialized agent matched this task")
+        return await run_agent(route.agent, task)
 
     def available_agents(self):
         return [agent.name for agent in AGENTS]
