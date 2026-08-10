@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .orchestrator import Orchestrator
@@ -24,4 +24,13 @@ def agents():
 @app.post("/route")
 def route(request: TaskRequest):
     result = orchestrator.route(request.task)
-    return {"agent": result.agent, "reason": result.reason}
+    return {"agent": result.agent, "reason": result.reason, "requires_multi_agent": result.requires_multi_agent}
+
+
+@app.post("/run")
+async def run(request: TaskRequest):
+    try:
+        result = await orchestrator.run_task(request.task)
+        return result.model_dump()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
