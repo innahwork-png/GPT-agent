@@ -1,0 +1,20 @@
+[project]
+name = "personal-ai-team"
+version = "0.1.0"
+description = "Personal AI Team: cloud-ready multi-agent Orchestrator"
+requires-python = ">=3.11"
+dependencies = [
+  "openai-agents>=0.2.0",
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.34.0",
+  "pydantic-settings>=2.7.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.3.0",
+  "httpx>=0.28.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
