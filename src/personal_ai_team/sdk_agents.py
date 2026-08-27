@@ -1,3 +1,5 @@
+import os
+
 from agents import Agent
 
 
@@ -14,10 +16,11 @@ def build_agent(name: str) -> Agent:
     normalized = name.strip().lower().replace("-", "_")
     if normalized not in AGENT_INSTRUCTIONS:
         raise KeyError(f"Unknown agent: {name}")
+    model = os.getenv("OPENAI_MODEL", "gpt-5.6").strip() or "gpt-5.6"
     return Agent(
         name=normalized.replace("_", " ").title(),
         instructions=AGENT_INSTRUCTIONS[normalized],
-        model="gpt-5.6",
+        model=model,
     )
 
 
