@@ -23,7 +23,7 @@ def build_agent(name: str) -> Agent:
         "name": normalized.replace("_", " ").title(),
         "instructions": AGENT_INSTRUCTIONS[normalized],
     }
-    if configured_model and configured_model not in {"gpt-5.6", "auto", "default"}:
+    if configured_model and configured_model not in {"auto", "default"}:
         kwargs["model"] = configured_model
 
     return Agent(**kwargs)
