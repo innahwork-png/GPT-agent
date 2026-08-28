@@ -17,10 +17,11 @@ def build_agent(name: str) -> Agent:
     if normalized not in AGENT_INSTRUCTIONS:
         raise KeyError(f"Unknown agent: {name}")
 
-    # Railway currently contains OPENAI_MODEL=gpt-5.6. Normalize that shorthand
-    # to the SDK's current GPT-5.6 model id instead of sending an invalid model id.
+    # Use the model value configured in Railway. The OpenAI Agents SDK accepts
+    # the current GPT-5.6 alias `gpt-5.6` (which maps to GPT-5.6 Sol), while
+    # omitting the model uses the SDK default `gpt-5.6-luna`.
     configured_model = os.getenv("OPENAI_MODEL", "").strip()
-    model = "gpt-5.6-luna" if configured_model in {"", "gpt-5.6"} else configured_model
+    model = configured_model or None
 
     return Agent(
         name=normalized.replace("_", " ").title(),
