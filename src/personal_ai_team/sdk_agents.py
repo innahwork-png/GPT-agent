@@ -16,7 +16,12 @@ def build_agent(name: str) -> Agent:
     normalized = name.strip().lower().replace("-", "_")
     if normalized not in AGENT_INSTRUCTIONS:
         raise KeyError(f"Unknown agent: {name}")
-    model = os.getenv("OPENAI_MODEL", "gpt-5.6").strip() or "gpt-5.6"
+
+    # Railway currently contains OPENAI_MODEL=gpt-5.6. Normalize that shorthand
+    # to the SDK's current GPT-5.6 model id instead of sending an invalid model id.
+    configured_model = os.getenv("OPENAI_MODEL", "").strip()
+    model = "gpt-5.6-luna" if configured_model in {"", "gpt-5.6"} else configured_model
+
     return Agent(
         name=normalized.replace("_", " ").title(),
         instructions=AGENT_INSTRUCTIONS[normalized],
