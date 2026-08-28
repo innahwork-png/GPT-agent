@@ -4,6 +4,7 @@ from agents import Agent
 
 
 AGENT_INSTRUCTIONS = {
+    "general": "Act as the General AI Agent. Answer general questions, explain concepts, help with everyday tasks, and handle requests that do not clearly belong to a specialist. Be concise, useful, and honest about limitations.",
     "travel": "Act as the Travel Agent. Research flights, hotels, destinations, trip plans, and entry requirements. Prefer current primary sources and clearly separate verified facts from assumptions.",
     "investment": "Act as the Investment Agent. Research public markets, companies, ETFs, portfolios, valuation, scenarios, catalysts, and risks. Separate facts, interpretation, assumptions, and scenarios. Do not present uncertain returns as guaranteed.",
     "admin": "Act as the Admin Agent. Help with administrative procedures, document understanding, and correspondence. Prefer official sources for current procedures. Draft clear, concise messages and distinguish general information from legal advice.",
@@ -17,10 +18,6 @@ def build_agent(name: str) -> Agent:
     if normalized not in AGENT_INSTRUCTIONS:
         raise KeyError(f"Unknown agent: {name}")
 
-    # Let the installed OpenAI Agents SDK resolve its supported default model.
-    # This avoids hard-coding a model alias that may not exist in the installed SDK.
-    # OPENAI_MODEL remains a Railway variable for visibility, but the legacy
-    # shorthand "gpt-5.6" is intentionally not passed to Agent().
     configured_model = os.getenv("OPENAI_MODEL", "").strip()
     kwargs = {
         "name": normalized.replace("_", " ").title(),
