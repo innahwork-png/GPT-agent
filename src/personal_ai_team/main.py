@@ -14,7 +14,7 @@ from .orchestrator import Orchestrator
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("personal_ai_team")
 
-app = FastAPI(title="Personal AI Team", version="0.3.0")
+app = FastAPI(title="Personal AI Team", version="0.3.1")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 web_security = HTTPBasic()
@@ -82,6 +82,19 @@ form.addEventListener('submit',async e=>{e.preventDefault();const task=input.val
 """)
 
 
+def safe_error_detail(exc: Exception) -> str:
+    """Return a useful diagnostic without exposing secrets or request payloads."""
+    message = " ".join(str(exc).split())
+    if not message:
+        return type(exc).__name__
+    # Never echo common secret-bearing headers/tokens if a provider exception includes them.
+    for secret_name in ("OPENAI_API_KEY", "AGENT_API_TOKEN", "SUPABASE_SERVICE_ROLE_KEY", "WEB_PASSWORD"):
+        value = os.getenv(secret_name, "")
+        if value:
+            message = message.replace(value, "[REDACTED]")
+    return f"{type(exc).__name__}: {message[:800]}"
+
+
 @app.post("/chat")
 async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
     session_key = request.session_key or f"web:{username}:{uuid.uuid4()}"
@@ -97,8 +110,9 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
         logger.warning("Web agent request rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("Web agent execution failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="Agent execution failed") from exc
+        detail = safe_error_detail(exc)
+        logger.exception("Web agent execution failed: %s", detail)
+        raise HTTPException(status_code=502, detail=detail) from exc
 
 
 @app.get("/health")
@@ -159,8 +173,9 @@ async def run(request: TaskRequest, x_api_key: str | None = Header(default=None)
         logger.warning("Agent request rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("Agent execution failed: %s", type(exc).__name__)
-        raise HTTPException(status_code=502, detail="Agent execution failed") from exc
+        detail = safe_error_detail(exc)
+        logger.exception("Agent execution failed: %s", detail)
+        raise HTTPException(status_code=502, detail=detail) from exc
 
 
 @app.get("/memory")
