@@ -17,17 +17,19 @@ def build_agent(name: str) -> Agent:
     if normalized not in AGENT_INSTRUCTIONS:
         raise KeyError(f"Unknown agent: {name}")
 
-    # Use the model value configured in Railway. The OpenAI Agents SDK accepts
-    # the current GPT-5.6 alias `gpt-5.6` (which maps to GPT-5.6 Sol), while
-    # omitting the model uses the SDK default `gpt-5.6-luna`.
+    # Let the installed OpenAI Agents SDK resolve its supported default model.
+    # This avoids hard-coding a model alias that may not exist in the installed SDK.
+    # OPENAI_MODEL remains a Railway variable for visibility, but the legacy
+    # shorthand "gpt-5.6" is intentionally not passed to Agent().
     configured_model = os.getenv("OPENAI_MODEL", "").strip()
-    model = configured_model or None
+    kwargs = {
+        "name": normalized.replace("_", " ").title(),
+        "instructions": AGENT_INSTRUCTIONS[normalized],
+    }
+    if configured_model and configured_model not in {"gpt-5.6", "auto", "default"}:
+        kwargs["model"] = configured_model
 
-    return Agent(
-        name=normalized.replace("_", " ").title(),
-        instructions=AGENT_INSTRUCTIONS[normalized],
-        model=model,
-    )
+    return Agent(**kwargs)
 
 
 SPECIALIZED_AGENTS = {name: build_agent(name) for name in AGENT_INSTRUCTIONS}
