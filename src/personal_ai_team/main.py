@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from .memory import MemoryStore
 from .orchestrator import Orchestrator
 
-app = FastAPI(title="Personal AI Team", version="0.2.1")
+app = FastAPI(title="Personal AI Team", version="0.2.2")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 
@@ -34,24 +34,26 @@ def health():
 @app.get("/diagnostics")
 def diagnostics(x_api_key: str | None = Header(default=None)):
     require_api_token(x_api_key)
+
+    # The OpenAI Agents SDK resolves its key from OPENAI_API_KEY.
+    openai_configured = bool(os.getenv("OPENAI_API_KEY", "").strip())
     supabase_configured = bool(os.getenv("SUPABASE_URL", "").strip()) and bool(
         os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     )
-    openai_configured = bool(os.getenv("OPENAI_API_KEY", "").strip())
     supabase_reachable = False
     supabase_error = None
 
-    if memory.enabled:
+    if memory.enabled and memory._client is not None:
         try:
-            # A bounded read proves the service can reach the database without
-            # exposing any stored content or credentials.
-            memory.client.table("agent_memory").select("id").limit(1).execute()
+            # Bounded read: verifies Data API/database access without returning
+            # stored content or any credential.
+            memory._client.table("agent_memory").select("id").limit(1).execute()
             supabase_reachable = True
         except Exception as exc:
             supabase_error = type(exc).__name__
 
     return {
-        "status": "ok" if supabase_reachable else "degraded",
+        "status": "ok" if openai_configured and supabase_reachable else "degraded",
         "openai_configured": openai_configured,
         "supabase_configured": supabase_configured,
         "supabase_reachable": supabase_reachable,
