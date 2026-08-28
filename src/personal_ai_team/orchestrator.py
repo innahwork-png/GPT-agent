@@ -19,11 +19,11 @@ class Orchestrator:
     def route(self, task: str) -> Route:
         text = task.lower()
         rules = (
-            (("flight", "hotel", "travel", "trip", "visa", "перелет", "отель", "поездк"), "travel"),
-            (("stock", "etf", "portfolio", "invest", "valuation", "акци", "инвест", "портфел"), "investment"),
-            (("letter", "email", "register", "close", "document", "письм", "зарегистр", "закрыт"), "admin"),
-            (("youtube", "instagram", "content", "script", "channel", "ютуб", "инстаграм", "канал", "сценар"), "content"),
-            (("employer", "job", "construction", "solar", "harvest", "warehouse", "factory", "работ", "работодател", "строитель", "солнеч", "склад", "завод"), "employer_sourcing"),
+            (("flight", "hotel", "hotels", "travel", "trip", "visa", "отел", "гостиниц", "перелет", "перелёт", "авиабилет", "поездк", "путешеств", "курорт", "рейс"), "travel"),
+            (("stock", "etf", "portfolio", "invest", "valuation", "акци", "инвест", "портфел", "оценк компании"), "investment"),
+            (("letter", "email", "register", "close", "document", "письм", "зарегистр", "закрыт", "документ", "справк"), "admin"),
+            (("youtube", "instagram", "content", "script", "channel", "ютуб", "инстаграм", "контент", "канал", "сценар"), "content"),
+            (("employer", "job", "construction", "solar", "harvest", "warehouse", "factory", "работ", "работодател", "строитель", "солнеч", "склад", "завод", "ваканс"), "employer_sourcing"),
         )
         for keywords, agent_name in rules:
             if any(keyword in text for keyword in keywords):
@@ -49,5 +49,5 @@ class Orchestrator:
 
     @staticmethod
     def _looks_multi_agent(text: str) -> bool:
-        markers = ("and", "also", "потом", "и затем", "подготовь письмо", "сравни", "затем")
+        markers = ("and", "also", "потом", "также", "и затем", "подготовь письмо", "сравни", "затем")
         return sum(marker in text for marker in markers) >= 1
