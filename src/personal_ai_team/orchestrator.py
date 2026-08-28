@@ -14,7 +14,7 @@ class Route:
 
 
 class Orchestrator:
-    """Route tasks and execute specialized agents through the SDK."""
+    """Route tasks and execute specialized or general agents through the SDK."""
 
     def route(self, task: str) -> Route:
         text = task.lower()
@@ -32,17 +32,17 @@ class Orchestrator:
                     reason=f"Matched task keywords for {agent_name}.",
                     requires_multi_agent=self._looks_multi_agent(text),
                 )
-        return Route(agent="orchestrator", reason="No specialized route matched; orchestration decision required.")
+        # General requests should go to the general agent instead of failing.
+        return Route(agent="general", reason="No specialist keyword matched; using the general AI agent.")
 
     async def run_task(self, task: str) -> AgentResult:
-        """Route and execute a task. Unknown tasks fail explicitly."""
         route = self.route(task)
         if route.agent not in SPECIALIZED_AGENTS:
-            raise ValueError("No specialized agent matched this task")
+            raise ValueError(f"Agent is not configured: {route.agent}")
         return await run_agent(route.agent, task)
 
     def available_agents(self):
-        return [agent.name for agent in AGENTS]
+        return [agent.name for agent in AGENTS] + ["General"]
 
     def get_sdk_agent(self, name: str):
         return SPECIALIZED_AGENTS[name]
