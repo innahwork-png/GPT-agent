@@ -1,4 +1,5 @@
 import hmac
+import logging
 import os
 import uuid
 
@@ -8,7 +9,10 @@ from pydantic import BaseModel
 from .memory import MemoryStore
 from .orchestrator import Orchestrator
 
-app = FastAPI(title="Personal AI Team", version="0.2.2")
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
+logger = logging.getLogger("personal_ai_team")
+
+app = FastAPI(title="Personal AI Team", version="0.2.3")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 
@@ -80,13 +84,20 @@ async def run(request: TaskRequest, x_api_key: str | None = Header(default=None)
     require_api_token(x_api_key)
     session_key = request.session_key or str(uuid.uuid4())
     try:
+        logger.info("Starting agent run: agent=%s session=%s", orchestrator.route(request.task).agent, session_key)
         memory.save_message(session_key, "user", request.task)
         result = await orchestrator.run_task(request.task)
         memory.save_message(session_key, "assistant", result.summary, result.agent)
+        logger.info("Agent run completed: agent=%s session=%s", result.agent, session_key)
         return {**result.model_dump(), "session_key": session_key}
     except ValueError as exc:
+        logger.warning("Agent request rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        # Log the traceback server-side for Railway debugging. Do not expose
+        # exception text to the API client because third-party SDK errors can
+        # contain request details or other sensitive information.
+        logger.exception("Agent execution failed: %s", type(exc).__name__)
         raise HTTPException(status_code=502, detail="Agent execution failed") from exc
 
 
