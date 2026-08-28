@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from .memory import MemoryStore
 from .orchestrator import Orchestrator
 
-app = FastAPI(title="Personal AI Team", version="0.2.0")
+app = FastAPI(title="Personal AI Team", version="0.2.1")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 
@@ -29,6 +29,35 @@ def require_api_token(x_api_key: str | None) -> None:
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "personal-ai-team", "memory": memory.enabled}
+
+
+@app.get("/diagnostics")
+def diagnostics(x_api_key: str | None = Header(default=None)):
+    require_api_token(x_api_key)
+    supabase_configured = bool(os.getenv("SUPABASE_URL", "").strip()) and bool(
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    )
+    openai_configured = bool(os.getenv("OPENAI_API_KEY", "").strip())
+    supabase_reachable = False
+    supabase_error = None
+
+    if memory.enabled:
+        try:
+            # A bounded read proves the service can reach the database without
+            # exposing any stored content or credentials.
+            memory.client.table("agent_memory").select("id").limit(1).execute()
+            supabase_reachable = True
+        except Exception as exc:
+            supabase_error = type(exc).__name__
+
+    return {
+        "status": "ok" if supabase_reachable else "degraded",
+        "openai_configured": openai_configured,
+        "supabase_configured": supabase_configured,
+        "supabase_reachable": supabase_reachable,
+        "supabase_error": supabase_error,
+        "memory_enabled": memory.enabled,
+    }
 
 
 @app.get("/agents")
