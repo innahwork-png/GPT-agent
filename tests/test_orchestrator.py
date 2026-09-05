@@ -1,5 +1,5 @@
 from personal_ai_team.orchestrator import Orchestrator
-from personal_ai_team.sdk_agents import SPECIALIZED_AGENTS
+from personal_ai_team.sdk_agents import ORCHESTRATOR_AGENT, SPECIALIZED_AGENTS
 
 
 def test_travel_route():
@@ -29,14 +29,20 @@ def test_content_route():
 
 def test_unknown_route():
     result = Orchestrator().route("Something unrelated")
-    assert result.agent == "orchestrator"
+    assert result.agent == "general"
 
 
 def test_all_specialized_sdk_agents_exist():
     assert set(SPECIALIZED_AGENTS) == {
+        "general",
         "travel",
         "investment",
         "admin",
         "content",
         "employer_sourcing",
     }
+
+
+def test_manager_orchestrator_exists():
+    assert ORCHESTRATOR_AGENT.name == "Orchestrator"
+    assert len(ORCHESTRATOR_AGENT.tools) == 6

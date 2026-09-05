@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from .agents import AGENTS
 from .models import AgentResult
-from .runtime import run_agent
+from .runtime import run_orchestrator
 from .sdk_agents import SPECIALIZED_AGENTS
 
 
@@ -14,7 +14,7 @@ class Route:
 
 
 class Orchestrator:
-    """Route tasks and execute specialized or general agents through the SDK."""
+    """Central manager: route for observability, then delegate execution to the SDK manager."""
 
     def route(self, task: str) -> Route:
         text = task.lower()
@@ -32,20 +32,14 @@ class Orchestrator:
                     reason=f"Matched task keywords for {agent_name}.",
                     requires_multi_agent=self._looks_multi_agent(text),
                 )
-        # General requests should go to the general agent instead of failing.
         return Route(agent="general", reason="No specialist keyword matched; using the general AI agent.")
 
     async def run_task(self, task: str) -> AgentResult:
-        route = self.route(task)
-        if route.agent not in SPECIALIZED_AGENTS:
-            raise ValueError(f"Agent is not configured: {route.agent}")
-        return await run_agent(route.agent, task)
+        """Run the central SDK manager so it can choose and combine specialist agents."""
+        return await run_orchestrator(task)
 
     def available_agents(self):
         return [agent.name for agent in AGENTS] + ["General"]
-
-    def get_sdk_agent(self, name: str):
-        return SPECIALIZED_AGENTS[name]
 
     @staticmethod
     def _looks_multi_agent(text: str) -> bool:
