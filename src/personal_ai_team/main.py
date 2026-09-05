@@ -1,6 +1,8 @@
+import hashlib
 import hmac
 import logging
 import os
+import re
 import uuid
 
 from fastapi import FastAPI, Header, HTTPException, Depends
@@ -15,7 +17,7 @@ from .orchestrator import Orchestrator
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("personal_ai_team")
 
-app = FastAPI(title="Personal AI Team", version="0.4.1")
+app = FastAPI(title="Personal AI Team", version="0.5.0")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 web_security = HTTPBasic()
@@ -44,6 +46,85 @@ def require_web_auth(credentials: HTTPBasicCredentials = Depends(web_security)) 
     if not (valid_user and valid_password):
         raise HTTPException(status_code=401, detail="Invalid credentials", headers={"WWW-Authenticate": "Basic"})
     return username
+
+
+def extract_explicit_memory(task: str) -> str | None:
+    """Extract a clear user instruction to persist a memory item."""
+    patterns = (
+        r"(?:запомни|запомните|сохрани|сохраняй)\s*[,\-:]?\s*(?:что\s+)?(.+)$",
+        r"(?:remember|save)\s+(?:that\s+)?(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, task.strip(), flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            content = re.sub(r"\s+", " ", match.group(1)).strip(" .!?\n\t")
+            if content:
+                return content
+    return None
+
+
+def memory_context(session_key: str) -> str:
+    """Build compact context from persistent memories and recent conversation."""
+    sections: list[str] = []
+    try:
+        memories = memory.recall(limit=20)
+        if memories:
+            lines = [
+                f"- {item.get('content', '').strip()}"
+                for item in memories
+                if str(item.get("content", "")).strip()
+            ]
+            if lines:
+                sections.append("Persistent user memories:\n" + "\n".join(lines))
+    except Exception:
+        logger.exception("Persistent memory recall failed")
+
+    try:
+        recent = memory.recent_messages(session_key, limit=12)
+        if recent:
+            lines = []
+            for item in recent:
+                role = str(item.get("role", "")).strip() or "unknown"
+                content = str(item.get("content", "")).strip()
+                if content:
+                    lines.append(f"{role}: {content}")
+            if lines:
+                sections.append("Recent conversation context:\n" + "\n".join(lines))
+    except Exception:
+        logger.exception("Conversation history recall failed")
+
+    if not sections:
+        return ""
+    return (
+        "\n\n[PRIVATE MEMORY CONTEXT — use this as context for the current request. "
+        "Do not invent memories and do not reveal internal memory mechanics unless asked.]\n"
+        + "\n\n".join(sections)
+        + "\n[END PRIVATE MEMORY CONTEXT]\n"
+    )
+
+
+def prepare_task(task: str, session_key: str, username: str) -> str:
+    explicit_memory = extract_explicit_memory(task)
+    if explicit_memory and memory.enabled:
+        memory_key = "user:" + hashlib.sha256(
+            f"{username}:{explicit_memory}".encode("utf-8")
+        ).hexdigest()
+        try:
+            memory.remember(
+                memory_key=memory_key,
+                content=explicit_memory,
+                category="user_preference",
+                importance=8,
+                metadata={"source": "explicit_user_request"},
+            )
+            logger.info("Persisted explicit user memory: key=%s", memory_key)
+        except Exception:
+            logger.exception("Failed to persist explicit user memory")
+
+    context = memory_context(session_key)
+    if not context:
+        return task
+    return f"{context}\n\nCurrent user request:\n{task}"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -112,7 +193,8 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
         route = orchestrator.route(request.task)
         logger.info("Starting web agent run: agent=%s session=%s", route.agent, session_key)
         memory.save_message(session_key, "user", request.task)
-        result = await orchestrator.run_task(request.task)
+        task_with_context = prepare_task(request.task, session_key, username)
+        result = await orchestrator.run_task(task_with_context)
         memory.save_message(session_key, "assistant", result.summary, result.agent)
         logger.info("Web agent run completed: agent=%s session=%s", result.agent, session_key)
         return {**result.model_dump(), "session_key": session_key}
@@ -141,12 +223,19 @@ def diagnostics():
     )
     supabase_reachable = False
     supabase_error = None
+    agent_memory_reachable = False
+    agent_memory_error = None
     if memory.enabled and memory._client is not None:
         try:
             memory._client.table("conversations").select("role").limit(1).execute()
             supabase_reachable = True
         except Exception as exc:
             supabase_error = type(exc).__name__
+        try:
+            memory._client.table("agent_memory").select("memory_key").limit(1).execute()
+            agent_memory_reachable = True
+        except Exception as exc:
+            agent_memory_error = type(exc).__name__
 
     google_drive_configured = all(
         os.getenv(name, "").strip()
@@ -163,6 +252,8 @@ def diagnostics():
         "supabase_configured": supabase_configured,
         "supabase_reachable": supabase_reachable,
         "supabase_error": supabase_error,
+        "agent_memory_reachable": agent_memory_reachable,
+        "agent_memory_error": agent_memory_error,
         "google_drive_configured": google_drive_configured,
         "memory_enabled": memory.enabled,
     }
@@ -188,7 +279,8 @@ async def run(request: TaskRequest, x_api_key: str | None = Header(default=None)
     try:
         logger.info("Starting agent run: agent=%s session=%s", orchestrator.route(request.task).agent, session_key)
         memory.save_message(session_key, "user", request.task)
-        result = await orchestrator.run_task(request.task)
+        task_with_context = prepare_task(request.task, session_key, "api")
+        result = await orchestrator.run_task(task_with_context)
         memory.save_message(session_key, "assistant", result.summary, result.agent)
         logger.info("Agent run completed: agent=%s session=%s", result.agent, session_key)
         return {**result.model_dump(), "session_key": session_key}
