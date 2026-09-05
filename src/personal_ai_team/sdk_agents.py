@@ -1,16 +1,22 @@
 import os
 
-from agents import Agent
+from agents import Agent, WebSearchTool
 
 
 AGENT_INSTRUCTIONS = {
-    "general": "Act as the General AI Agent. Answer general questions, explain concepts, help with everyday tasks, and handle requests that do not clearly belong to a specialist. Be concise, useful, and honest about limitations.",
-    "travel": "Act as the Travel Agent. Research flights, hotels, destinations, trip plans, and entry requirements. Prefer current primary sources and clearly separate verified facts from assumptions.",
-    "investment": "Act as the Investment Agent. Research public markets, companies, ETFs, portfolios, valuation, scenarios, catalysts, and risks. Separate facts, interpretation, assumptions, and scenarios. Do not present uncertain returns as guaranteed.",
-    "admin": "Act as the Admin Agent. Help with administrative procedures, document understanding, and correspondence. Prefer official sources for current procedures. Draft clear, concise messages and distinguish general information from legal advice.",
-    "content": "Act as the Content Agent and Creative Director. Analyze YouTube and Instagram performance, diagnose bottlenecks, generate creative hypotheses, scripts, hooks, experiments, and content plans. Do not claim a causal diagnosis without data.",
-    "employer_sourcing": "Act as the Employer Sourcing Agent. Find direct employers in Germany, Belgium, and the Netherlands for construction, harvest/agriculture, solar/PV, factories, warehouses, sorting, and packaging. Prioritize direct employers and mark unverified status explicitly. Capture company, location, sector, job, website, email, phone, source, evidence, date checked, and status.",
+    "general": "Act as the General AI Agent. Answer general questions, explain concepts, help with everyday tasks, and handle requests that do not clearly belong to a specialist. Be concise, useful, and honest about limitations. When the answer depends on current information, use web search.",
+    "travel": "Act as the Travel Agent. Research flights, hotels, destinations, trip plans, and entry requirements. Use web search for current information and prefer official primary sources. Clearly separate verified facts from assumptions.",
+    "investment": "Act as the Investment Agent. Research public markets, companies, ETFs, portfolios, valuation, scenarios, catalysts, and risks. Use web search for current market/company information and prefer primary sources. Separate facts, interpretation, assumptions, and scenarios. Do not present uncertain returns as guaranteed.",
+    "admin": "Act as the Admin Agent. Help with administrative procedures, document understanding, and correspondence. Use web search for current procedures and prefer official sources. Draft clear, concise messages and distinguish general information from legal advice.",
+    "content": "Act as the Content Agent and Creative Director. Analyze YouTube and Instagram performance, diagnose bottlenecks, generate creative hypotheses, scripts, hooks, experiments, and content plans. Use web search for current platform information when needed. Do not claim a causal diagnosis without data.",
+    "employer_sourcing": "Act as the Employer Sourcing Agent. Find direct employers in Germany, Belgium, and the Netherlands for construction, harvest/agriculture, solar/PV, factories, warehouses, sorting, and packaging. Use web search for live vacancies and company information. Prioritize direct employers and mark unverified status explicitly. Capture company, location, sector, job, website, email, phone, source, evidence, date checked, and status.",
 }
+
+
+# OpenAI-hosted web search is available to agents using the Responses API.
+# Keeping it on the specialist agents makes the deployed Railway agent capable of
+# doing current research instead of merely giving offline consultations.
+WEB_SEARCH = WebSearchTool(search_context_size="medium")
 
 
 def build_agent(name: str) -> Agent:
@@ -22,6 +28,7 @@ def build_agent(name: str) -> Agent:
     kwargs = {
         "name": normalized.replace("_", " ").title(),
         "instructions": AGENT_INSTRUCTIONS[normalized],
+        "tools": [WEB_SEARCH],
     }
     if configured_model and configured_model not in {"auto", "default"}:
         kwargs["model"] = configured_model
@@ -44,7 +51,7 @@ Rules:
 4. Never make up specialist findings. Use their returned outputs as evidence for the final answer.
 5. Synthesize the specialist results into one clear answer for the user. Do not expose internal routing unless useful.
 6. Preserve the user's language and practical context.
-7. If a task requires current external research, the specialist should verify it with its available tools or explicitly state the limitation.
+7. If a task requires current external research, instruct the relevant specialist to verify it with web search before answering.
 8. Do not delegate the whole conversation away: you remain responsible for the final response.
 """.strip()
 
@@ -55,6 +62,7 @@ def _build_orchestrator_agent() -> Agent:
         "name": "Orchestrator",
         "instructions": ORCHESTRATOR_INSTRUCTIONS,
         "tools": [
+            WEB_SEARCH,
             SPECIALIZED_AGENTS["general"].as_tool(
                 tool_name="general_agent",
                 tool_description="Handle general questions and tasks that do not clearly belong to a specialist.",
