@@ -13,6 +13,7 @@ AGENTS = (
     AgentSpec("admin", "Administrative procedures, correspondence, and document assistance."),
     AgentSpec("content", "YouTube/Instagram analytics, creative direction, scripts, and experiments."),
     AgentSpec("employer_sourcing", "Direct-employer sourcing in Germany, Belgium, and the Netherlands."),
+    AgentSpec("cinemood", "Films, series, music, entertainment discovery, and taste-aware recommendations."),
 )
 
 
