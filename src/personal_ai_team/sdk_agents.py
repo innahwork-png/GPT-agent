@@ -2,6 +2,8 @@ import os
 
 from agents import Agent, WebSearchTool
 
+from .cinema import CINEMOOD_SCOPE
+
 
 AGENT_INSTRUCTIONS = {
     "general": "Act as the General AI Agent. Answer general questions, explain concepts, help with everyday tasks, and handle requests that do not clearly belong to a specialist. Be concise, useful, and honest about limitations. When the answer depends on current information, use web search.",
@@ -10,12 +12,10 @@ AGENT_INSTRUCTIONS = {
     "admin": "Act as the Admin Agent. Help with administrative procedures, document understanding, and correspondence. Use web search for current procedures and prefer official sources. Draft clear, concise messages and distinguish general information from legal advice.",
     "content": "Act as the Content Agent and Creative Director. Analyze YouTube and Instagram performance, diagnose bottlenecks, generate creative hypotheses, scripts, hooks, experiments, and content plans. Use web search for current platform information when needed. Do not claim a causal diagnosis without data.",
     "employer_sourcing": "Act as the Employer Sourcing Agent. Find direct employers in Germany, Belgium, and the Netherlands for construction, harvest/agriculture, solar/PV, factories, warehouses, sorting, and packaging. Use web search for live vacancies and company information. Prioritize direct employers and mark unverified status explicitly. Capture company, location, sector, job, website, email, phone, source, evidence, date checked, and status.",
+    "cinemood": CINEMOOD_SCOPE,
 }
 
 
-# OpenAI-hosted web search is available to agents using the Responses API.
-# Keeping it on the specialist agents makes the deployed Railway agent capable of
-# doing current research instead of merely giving offline consultations.
 WEB_SEARCH = WebSearchTool(search_context_size="medium")
 
 
@@ -53,6 +53,7 @@ Rules:
 6. Preserve the user's language and practical context.
 7. If a task requires current external research, instruct the relevant specialist to verify it with web search before answering.
 8. Do not delegate the whole conversation away: you remain responsible for the final response.
+9. For film, series, music, entertainment discovery, or taste-aware recommendations, use the CineMood specialist.
 """.strip()
 
 
@@ -86,6 +87,10 @@ def _build_orchestrator_agent() -> Agent:
             SPECIALIZED_AGENTS["employer_sourcing"].as_tool(
                 tool_name="employer_sourcing_agent",
                 tool_description="Find and assess direct employers and job opportunities in the supported sectors and countries.",
+            ),
+            SPECIALIZED_AGENTS["cinemood"].as_tool(
+                tool_name="cinemood_agent",
+                tool_description="Handle films, series, music, entertainment discovery, streaming availability, and taste-aware recommendations.",
             ),
         ],
     }
