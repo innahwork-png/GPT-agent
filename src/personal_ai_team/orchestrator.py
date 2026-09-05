@@ -41,6 +41,10 @@ class Orchestrator:
     def available_agents(self):
         return [agent.name for agent in AGENTS] + ["General"]
 
+    def get_sdk_agent(self, name: str):
+        """Return a configured specialist for compatibility with existing callers."""
+        return SPECIALIZED_AGENTS[name]
+
     @staticmethod
     def _looks_multi_agent(text: str) -> bool:
         markers = ("and", "also", "потом", "также", "и затем", "подготовь письмо", "сравни", "затем")
