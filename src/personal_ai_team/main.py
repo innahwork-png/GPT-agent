@@ -15,7 +15,7 @@ from .orchestrator import Orchestrator
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("personal_ai_team")
 
-app = FastAPI(title="Personal AI Team", version="0.4.0")
+app = FastAPI(title="Personal AI Team", version="0.4.1")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 web_security = HTTPBasic()
@@ -84,7 +84,6 @@ form.addEventListener('submit',async e=>{e.preventDefault();const task=input.val
 
 
 def safe_error_detail(exc: Exception) -> str:
-    """Return a useful diagnostic without exposing secrets or request payloads."""
     message = " ".join(str(exc).split())
     if not message:
         return type(exc).__name__
@@ -96,7 +95,6 @@ def safe_error_detail(exc: Exception) -> str:
 
 
 def check_openai() -> tuple[bool, str | None]:
-    """Verify that the Railway OpenAI credential is present and the configured model is accessible."""
     if not os.getenv("OPENAI_API_KEY", "").strip():
         return False, "OPENAI_API_KEY is not configured"
     model = os.getenv("OPENAI_MODEL", "gpt-5.6").strip() or "gpt-5.6"
@@ -119,7 +117,6 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
         logger.info("Web agent run completed: agent=%s session=%s", result.agent, session_key)
         return {**result.model_dump(), "session_key": session_key}
     except ValueError as exc:
-        logger.warning("Web agent request rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         detail = safe_error_detail(exc)
@@ -133,9 +130,8 @@ def health():
 
 
 @app.get("/diagnostics")
-def diagnostics(x_api_key: str | None = Header(default=None)):
-    require_api_token(x_api_key)
-
+def diagnostics():
+    """Safe public diagnostic endpoint: exposes status only, never secrets."""
     openai_configured = bool(os.getenv("OPENAI_API_KEY", "").strip())
     openai_reachable, openai_error = check_openai()
     configured_model = os.getenv("OPENAI_MODEL", "gpt-5.6").strip() or "gpt-5.6"
@@ -147,7 +143,6 @@ def diagnostics(x_api_key: str | None = Header(default=None)):
     supabase_error = None
     if memory.enabled and memory._client is not None:
         try:
-            # Use the table that the application itself writes to; do not assume an `id` column.
             memory._client.table("conversations").select("role").limit(1).execute()
             supabase_reachable = True
         except Exception as exc:
@@ -198,7 +193,6 @@ async def run(request: TaskRequest, x_api_key: str | None = Header(default=None)
         logger.info("Agent run completed: agent=%s session=%s", result.agent, session_key)
         return {**result.model_dump(), "session_key": session_key}
     except ValueError as exc:
-        logger.warning("Agent request rejected: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         detail = safe_error_detail(exc)
