@@ -6,6 +6,7 @@ import uuid
 from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from openai import OpenAI
 from pydantic import BaseModel
 
 from .memory import MemoryStore
@@ -14,7 +15,7 @@ from .orchestrator import Orchestrator
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("personal_ai_team")
 
-app = FastAPI(title="Personal AI Team", version="0.3.1")
+app = FastAPI(title="Personal AI Team", version="0.4.0")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 web_security = HTTPBasic()
@@ -87,12 +88,23 @@ def safe_error_detail(exc: Exception) -> str:
     message = " ".join(str(exc).split())
     if not message:
         return type(exc).__name__
-    # Never echo common secret-bearing headers/tokens if a provider exception includes them.
     for secret_name in ("OPENAI_API_KEY", "AGENT_API_TOKEN", "SUPABASE_SERVICE_ROLE_KEY", "WEB_PASSWORD"):
         value = os.getenv(secret_name, "")
         if value:
             message = message.replace(value, "[REDACTED]")
     return f"{type(exc).__name__}: {message[:800]}"
+
+
+def check_openai() -> tuple[bool, str | None]:
+    """Verify that the Railway OpenAI credential is present and the configured model is accessible."""
+    if not os.getenv("OPENAI_API_KEY", "").strip():
+        return False, "OPENAI_API_KEY is not configured"
+    model = os.getenv("OPENAI_MODEL", "gpt-5.6").strip() or "gpt-5.6"
+    try:
+        OpenAI().models.retrieve(model)
+        return True, None
+    except Exception as exc:
+        return False, safe_error_detail(exc)
 
 
 @app.post("/chat")
@@ -123,7 +135,11 @@ def health():
 @app.get("/diagnostics")
 def diagnostics(x_api_key: str | None = Header(default=None)):
     require_api_token(x_api_key)
+
     openai_configured = bool(os.getenv("OPENAI_API_KEY", "").strip())
+    openai_reachable, openai_error = check_openai()
+    configured_model = os.getenv("OPENAI_MODEL", "gpt-5.6").strip() or "gpt-5.6"
+
     supabase_configured = bool(os.getenv("SUPABASE_URL", "").strip()) and bool(
         os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
     )
@@ -131,16 +147,28 @@ def diagnostics(x_api_key: str | None = Header(default=None)):
     supabase_error = None
     if memory.enabled and memory._client is not None:
         try:
-            memory._client.table("agent_memory").select("id").limit(1).execute()
+            # Use the table that the application itself writes to; do not assume an `id` column.
+            memory._client.table("conversations").select("role").limit(1).execute()
             supabase_reachable = True
         except Exception as exc:
             supabase_error = type(exc).__name__
+
+    google_drive_configured = all(
+        os.getenv(name, "").strip()
+        for name in ("GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_REDIRECT_URI")
+    )
+
+    overall_ok = openai_reachable and (not supabase_configured or supabase_reachable)
     return {
-        "status": "ok" if openai_configured and supabase_reachable else "degraded",
+        "status": "ok" if overall_ok else "degraded",
         "openai_configured": openai_configured,
+        "openai_reachable": openai_reachable,
+        "openai_error": openai_error,
+        "openai_model": configured_model,
         "supabase_configured": supabase_configured,
         "supabase_reachable": supabase_reachable,
         "supabase_error": supabase_error,
+        "google_drive_configured": google_drive_configured,
         "memory_enabled": memory.enabled,
     }
 
