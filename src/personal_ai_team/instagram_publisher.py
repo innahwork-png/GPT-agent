@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Any
 
@@ -5,7 +6,7 @@ import httpx
 
 
 class InstagramPublisher:
-    """Minimal Instagram Graph API publisher for a professional account."""
+    """Instagram Graph API publisher for a professional account."""
 
     def __init__(self) -> None:
         self.access_token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
@@ -17,8 +18,7 @@ class InstagramPublisher:
         return bool(self.access_token and self.user_id)
 
     async def account(self) -> dict[str, Any]:
-        if not self.access_token or not self.user_id:
-            raise RuntimeError("Instagram publishing is not configured")
+        self._require_configured()
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(
                 f"{self.base_url}/me",
@@ -33,8 +33,7 @@ class InstagramPublisher:
         caption: str = "",
         cover_url: str | None = None,
     ) -> dict[str, Any]:
-        if not self.configured:
-            raise RuntimeError("Instagram publishing is not configured")
+        self._require_configured()
         params: dict[str, Any] = {
             "media_type": "REELS",
             "video_url": video_url,
@@ -49,9 +48,32 @@ class InstagramPublisher:
             response.raise_for_status()
             return response.json()
 
+    async def container_status(self, creation_id: str) -> dict[str, Any]:
+        self._require_configured()
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.get(
+                f"{self.base_url}/{creation_id}",
+                params={"fields": "status_code,status", "access_token": self.access_token},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def wait_until_ready(self, creation_id: str, timeout_seconds: int = 300) -> dict[str, Any]:
+        """Wait for Meta to finish processing the uploaded Reel before publishing it."""
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+        while True:
+            status = await self.container_status(creation_id)
+            status_code = str(status.get("status_code", "")).upper()
+            if status_code in {"FINISHED", "PUBLISHED"}:
+                return status
+            if status_code in {"ERROR", "EXPIRED"}:
+                raise RuntimeError(f"Instagram media processing failed: {status}")
+            if asyncio.get_running_loop().time() >= deadline:
+                raise TimeoutError("Instagram media container was not ready within 5 minutes")
+            await asyncio.sleep(5)
+
     async def publish(self, creation_id: str) -> dict[str, Any]:
-        if not self.configured:
-            raise RuntimeError("Instagram publishing is not configured")
+        self._require_configured()
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
                 f"{self.base_url}/{self.user_id}/media_publish",
@@ -70,4 +92,9 @@ class InstagramPublisher:
         creation_id = container.get("id")
         if not creation_id:
             raise RuntimeError("Instagram did not return a media container ID")
+        await self.wait_until_ready(creation_id)
         return await self.publish(creation_id)
+
+    def _require_configured(self) -> None:
+        if not self.configured:
+            raise RuntimeError("Instagram publishing is not configured")
