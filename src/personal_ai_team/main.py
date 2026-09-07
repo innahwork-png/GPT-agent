@@ -215,9 +215,8 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
 
 
 @app.get("/instagram/account")
-async def instagram_account(x_api_key: str | None = Header(default=None)):
-    """Verify that the configured Instagram token can access the target account."""
-    require_api_token(x_api_key)
+async def instagram_account():
+    """Verify Instagram API access without exposing or requiring any secret in the browser."""
     try:
         account = await instagram.account()
         return {"status": "ok", "account": account}
