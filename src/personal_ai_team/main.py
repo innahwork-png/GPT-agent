@@ -214,6 +214,21 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
         raise HTTPException(status_code=502, detail=detail) from exc
 
 
+@app.get("/instagram/account")
+async def instagram_account(x_api_key: str | None = Header(default=None)):
+    """Verify that the configured Instagram token can access the target account."""
+    require_api_token(x_api_key)
+    try:
+        account = await instagram.account()
+        return {"status": "ok", "account": account}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = safe_error_detail(exc)
+        logger.exception("Instagram account check failed: %s", detail)
+        raise HTTPException(status_code=502, detail=detail) from exc
+
+
 @app.post("/instagram/publish")
 async def publish_instagram_reel(
     request: InstagramPublishRequest,
