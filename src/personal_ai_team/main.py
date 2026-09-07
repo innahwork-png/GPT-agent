@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from .memory import MemoryStore
 from .orchestrator import Orchestrator
+from .instagram_publisher import InstagramPublisher
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("personal_ai_team")
@@ -21,11 +22,18 @@ app = FastAPI(title="Personal AI Team", version="0.5.0")
 orchestrator = Orchestrator()
 memory = MemoryStore()
 web_security = HTTPBasic()
+instagram = InstagramPublisher()
 
 
 class TaskRequest(BaseModel):
     task: str
     session_key: str | None = None
+
+
+class InstagramPublishRequest(BaseModel):
+    video_url: str
+    caption: str = ""
+    cover_url: str | None = None
 
 
 def require_api_token(x_api_key: str | None) -> None:
@@ -168,7 +176,7 @@ def safe_error_detail(exc: Exception) -> str:
     message = " ".join(str(exc).split())
     if not message:
         return type(exc).__name__
-    for secret_name in ("OPENAI_API_KEY", "AGENT_API_TOKEN", "SUPABASE_SERVICE_ROLE_KEY", "WEB_PASSWORD"):
+    for secret_name in ("OPENAI_API_KEY", "AGENT_API_TOKEN", "SUPABASE_SERVICE_ROLE_KEY", "WEB_PASSWORD", "INSTAGRAM_ACCESS_TOKEN"):
         value = os.getenv(secret_name, "")
         if value:
             message = message.replace(value, "[REDACTED]")
@@ -203,6 +211,28 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
     except Exception as exc:
         detail = safe_error_detail(exc)
         logger.exception("Web agent execution failed: %s", detail)
+        raise HTTPException(status_code=502, detail=detail) from exc
+
+
+@app.post("/instagram/publish")
+async def publish_instagram_reel(
+    request: InstagramPublishRequest,
+    x_api_key: str | None = Header(default=None),
+):
+    """Explicitly publish an approved Reel to Dancing Camilla's Instagram account."""
+    require_api_token(x_api_key)
+    try:
+        result = await instagram.publish_reel(
+            video_url=request.video_url,
+            caption=request.caption,
+            cover_url=request.cover_url,
+        )
+        return {"status": "published", **result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = safe_error_detail(exc)
+        logger.exception("Instagram publication failed: %s", detail)
         raise HTTPException(status_code=502, detail=detail) from exc
 
 
@@ -255,6 +285,7 @@ def diagnostics():
         "agent_memory_reachable": agent_memory_reachable,
         "agent_memory_error": agent_memory_error,
         "google_drive_configured": google_drive_configured,
+        "instagram_configured": instagram.configured,
         "memory_enabled": memory.enabled,
     }
 
