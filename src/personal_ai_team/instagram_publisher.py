@@ -9,7 +9,9 @@ class InstagramPublisher:
     """Instagram Graph API publisher for a professional account."""
 
     def __init__(self) -> None:
-        self.access_token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+        # Meta access tokens must not contain formatting whitespace. Normalize
+        # accidental line breaks/spaces introduced while copying the token.
+        self.access_token = "".join(os.getenv("INSTAGRAM_ACCESS_TOKEN", "").split())
         self.user_id = os.getenv("INSTAGRAM_USER_ID", "").strip()
         self.base_url = "https://graph.instagram.com"
 
