@@ -176,6 +176,22 @@ def safe_error_detail(exc: Exception) -> str:
     message = " ".join(str(exc).split())
     if not message:
         return type(exc).__name__
+
+    # Never expose credentials embedded in request URLs, including when
+    # whitespace/encoding normalization makes exact-string replacement fail.
+    message = re.sub(
+        r"([?&]access_token=)[^&'\"\s]+",
+        r"\1[REDACTED]",
+        message,
+        flags=re.IGNORECASE,
+    )
+    message = re.sub(
+        r"(access_token(?:%3D|=))[^&'\"\s]+",
+        r"\1[REDACTED]",
+        message,
+        flags=re.IGNORECASE,
+    )
+
     for secret_name in ("OPENAI_API_KEY", "AGENT_API_TOKEN", "SUPABASE_SERVICE_ROLE_KEY", "WEB_PASSWORD", "INSTAGRAM_ACCESS_TOKEN"):
         value = os.getenv(secret_name, "")
         if value:
@@ -286,6 +302,10 @@ def diagnostics():
         for name in ("GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_REDIRECT_URI")
     )
 
+    instagram_token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+    instagram_token_clean = instagram_token.strip()
+    instagram_token_has_internal_whitespace = any(ch.isspace() for ch in instagram_token_clean)
+
     overall_ok = openai_reachable and (not supabase_configured or supabase_reachable)
     return {
         "status": "ok" if overall_ok else "degraded",
@@ -300,6 +320,8 @@ def diagnostics():
         "agent_memory_error": agent_memory_error,
         "google_drive_configured": google_drive_configured,
         "instagram_configured": instagram.configured,
+        "instagram_token_length": len(instagram_token_clean),
+        "instagram_token_has_internal_whitespace": instagram_token_has_internal_whitespace,
         "memory_enabled": memory.enabled,
     }
 
