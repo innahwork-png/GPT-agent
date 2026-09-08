@@ -26,7 +26,7 @@ class InstagramPublisher:
                 f"{self.base_url}/me",
                 params={"fields": "id,username", "access_token": self.access_token},
             )
-            response.raise_for_status()
+            self._raise_for_meta(response)
             return response.json()
 
     async def create_reel_container(
@@ -47,7 +47,7 @@ class InstagramPublisher:
             params["cover_url"] = cover_url
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(f"{self.base_url}/{self.user_id}/media", params=params)
-            response.raise_for_status()
+            self._raise_for_meta(response)
             return response.json()
 
     async def container_status(self, creation_id: str) -> dict[str, Any]:
@@ -57,7 +57,7 @@ class InstagramPublisher:
                 f"{self.base_url}/{creation_id}",
                 params={"fields": "status_code,status", "access_token": self.access_token},
             )
-            response.raise_for_status()
+            self._raise_for_meta(response)
             return response.json()
 
     async def wait_until_ready(self, creation_id: str, timeout_seconds: int = 300) -> dict[str, Any]:
@@ -81,7 +81,7 @@ class InstagramPublisher:
                 f"{self.base_url}/{self.user_id}/media_publish",
                 params={"creation_id": creation_id, "access_token": self.access_token},
             )
-            response.raise_for_status()
+            self._raise_for_meta(response)
             return response.json()
 
     async def publish_reel(
@@ -96,6 +96,16 @@ class InstagramPublisher:
             raise RuntimeError("Instagram did not return a media container ID")
         await self.wait_until_ready(creation_id)
         return await self.publish(creation_id)
+
+    def _raise_for_meta(self, response: httpx.Response) -> None:
+        if not response.is_error:
+            return
+        try:
+            payload = response.json()
+            detail = payload.get("error", payload)
+        except ValueError:
+            detail = response.text[:1000]
+        raise RuntimeError(f"Instagram API {response.status_code}: {detail}")
 
     def _require_configured(self) -> None:
         if not self.configured:
