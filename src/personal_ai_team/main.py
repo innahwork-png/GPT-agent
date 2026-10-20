@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from .memory import MemoryStore
 from .orchestrator import Orchestrator
+from .projects import PROJECTS, route_project
 from .instagram_publisher import InstagramPublisher
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
@@ -330,6 +331,19 @@ def diagnostics():
 def agents(x_api_key: str | None = Header(default=None)):
     require_api_token(x_api_key)
     return {"agents": orchestrator.available_agents()}
+
+
+@app.get("/projects")
+def projects(x_api_key: str | None = Header(default=None)):
+    require_api_token(x_api_key)
+    return {"projects": [{"id": name, "specialists": list(specialists)} for name, specialists in PROJECTS.items()]}
+
+
+@app.post("/project-route")
+def project_route(request: TaskRequest, x_api_key: str | None = Header(default=None)):
+    require_api_token(x_api_key)
+    result = route_project(request.task)
+    return {"project": result.project, "specialist": result.specialist, "reason": result.reason}
 
 
 @app.post("/route")
