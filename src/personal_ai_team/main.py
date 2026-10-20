@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from .memory import MemoryStore
 from .orchestrator import Orchestrator
 from .projects import PROJECTS, route_project
+from .audit import start_audit, finish_audit
 from .instagram_publisher import InstagramPublisher
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
@@ -214,6 +215,7 @@ def check_openai() -> tuple[bool, str | None]:
 @app.post("/chat")
 async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
     session_key = request.session_key or f"web:{username}:{uuid.uuid4()}"
+    audit = start_audit(memory, request.task, "web")
     try:
         route = orchestrator.route(request.task)
         logger.info("Starting web agent run: agent=%s session=%s", route.agent, session_key)
@@ -222,10 +224,13 @@ async def chat(request: TaskRequest, username: str = Depends(require_web_auth)):
         result = await orchestrator.run_task(task_with_context)
         memory.save_message(session_key, "assistant", result.summary, result.agent)
         logger.info("Web agent run completed: agent=%s session=%s", result.agent, session_key)
+        finish_audit(memory, audit, True)
         return {**result.model_dump(), "session_key": session_key}
     except ValueError as exc:
+        finish_audit(memory, audit, False, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        finish_audit(memory, audit, False, exc)
         detail = safe_error_detail(exc)
         logger.exception("Web agent execution failed: %s", detail)
         raise HTTPException(status_code=502, detail=detail) from exc
@@ -357,6 +362,7 @@ def route(request: TaskRequest, x_api_key: str | None = Header(default=None)):
 async def run(request: TaskRequest, x_api_key: str | None = Header(default=None)):
     require_api_token(x_api_key)
     session_key = request.session_key or str(uuid.uuid4())
+    audit = start_audit(memory, request.task, "api")
     try:
         logger.info("Starting agent run: agent=%s session=%s", orchestrator.route(request.task).agent, session_key)
         memory.save_message(session_key, "user", request.task)
@@ -364,10 +370,13 @@ async def run(request: TaskRequest, x_api_key: str | None = Header(default=None)
         result = await orchestrator.run_task(task_with_context)
         memory.save_message(session_key, "assistant", result.summary, result.agent)
         logger.info("Agent run completed: agent=%s session=%s", result.agent, session_key)
+        finish_audit(memory, audit, True)
         return {**result.model_dump(), "session_key": session_key}
     except ValueError as exc:
+        finish_audit(memory, audit, False, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        finish_audit(memory, audit, False, exc)
         detail = safe_error_detail(exc)
         logger.exception("Agent execution failed: %s", detail)
         raise HTTPException(status_code=502, detail=detail) from exc
